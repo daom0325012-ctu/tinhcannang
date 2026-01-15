@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HealthCheck • Kiểm tra sức khỏe theo cân nặng</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    :root{
+      --bg0:#070A12;
+      --bg1:#0B1220;
+      --card:#0F1B33CC;
+      --stroke:#21314F;
+      --glow: 0 0 0 1px rgba(148,163,184,.15), 0 24px 64px rgba(0,0,0,.55);
+    }
+    body{
+      background:
+        radial-gradient(1200px 800px at 20% 10%, rgba(56,189,248,.18), transparent 60%),
+        radial-gradient(900px 700px at 85% 20%, rgba(167,139,250,.18), transparent 55%),
+        radial-gradient(900px 600px at 45% 95%, rgba(34,197,94,.10), transparent 55%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      color: #E5E7EB;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .glass{
+      background: linear-gradient(180deg, rgba(15,27,51,.78), rgba(15,27,51,.55));
+      border: 1px solid rgba(148,163,184,.16);
+      box-shadow: var(--glow);
+      backdrop-filter: blur(10px);
+    }
+    .soft-border{
+      border: 1px solid rgba(148,163,184,.18);
+    }
+    .ring-soft{
+      box-shadow: 0 0 0 1px rgba(148,163,184,.18) inset;
+    }
+    .focus-strong:focus{
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(56,189,248,.45), 0 0 0 6px rgba(56,189,248,.12);
+      border-color: rgba(56,189,248,.55);
+    }
+
+    /* Cat runner */
+    #catLayer{
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+    }
+    #catRunner{
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%);
+      will-change: transform;
+      filter: drop-shadow(0 10px 12px rgba(0,0,0,.35));
+    }
+    .cat{
+      width: 84px;
+      height: 60px;
+    }
+    .cat .body{
+      fill: #f3f4f6;
+    }
+    .cat .stripe{ fill:#d1d5db; opacity:.9; }
+    .cat .eye{ fill:#0b1220; }
+    .cat .cheek{ fill:#fca5a5; opacity:.65; }
+    .cat .outline{ fill:none; stroke:#0b1220; stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; opacity:.9; }
+    .cat .tail{
+      transform-origin: 66px 26px;
+      animation: tailWag 380ms ease-in-out infinite alternate;
+    }
+    .cat .leg{
+      transform-origin: center;
+      animation: runLeg 220ms ease-in-out infinite alternate;
+    }
+    .cat .leg.l2{ animation-delay: 110ms; }
+    @keyframes tailWag{ from{ transform: rotate(-18deg);} to{ transform: rotate(18deg);} }
+    @keyframes runLeg{ from{ transform: translateY(0px) rotate(0deg);} to{ transform: translateY(3px) rotate(8deg);} }
+
+    /* Subtle grid */
+    .gridbg{
+      background-image:
+        linear-gradient(to right, rgba(148,163,184,.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148,163,184,.08) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(circle at 35% 20%, black 0 55%, transparent 75%);
+      opacity: .35;
+    }
+
+    /* Progress bar sheen */
+    .sheen{
+      background-image: linear-gradient(90deg, rgba(255,255,255,.0), rgba(255,255,255,.10), rgba(255,255,255,.0));
+      background-size: 200% 100%;
+      animation: sheen 1.8s linear infinite;
+    }
+    @keyframes sheen{ from{ background-position: 200% 0;} to{ background-position: -200% 0;} }
+
+    /* Print */
+    @media print{
+      #catLayer, #topActions { display:none !important; }
+      body{ background: #fff !important; color:#111827 !important; }
+      .glass{ box-shadow:none !important; background:#fff !important; border:1px solid #e5e7eb !important; }
+      .print-dark{ color:#111827 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="fixed inset-0 gridbg" aria-hidden="true"></div>
+
+  <header class="relative max-w-6xl mx-auto px-4 pt-10 pb-6">
+    <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div>
+        <div class="inline-flex items-center gap-2 rounded-full px-3 py-1 soft-border bg-white/5">
+          <span class="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_18px_rgba(56,189,248,.65)]"></span>
+          <span class="text-sm text-slate-200/90">Ứng dụng kiểm tra sức khỏe theo cân nặng</span>
+        </div>
+        <h1 class="mt-4 text-3xl md:text-4xl font-semibold tracking-tight">
+          HealthCheck <span class="text-slate-200/70">• Nam & Nữ</span>
+        </h1>
+        <p class="mt-2 text-slate-200/70 max-w-2xl">
+          Nhập <span class="text-slate-100">cân nặng</span> và <span class="text-slate-100">chiều cao</span> để tính BMI, ước lượng cân nặng mục tiêu, và nhận gợi ý cơ bản.
+          Dữ liệu được xử lý ngay trên trình duyệt.
+        </p>
+      </div>
+      <div id="topActions" class="flex flex-wrap items-center gap-2">
+        <button id="toggleCatBtn" class="px-3 py-2 rounded-xl glass hover:bg-white/10 transition text-sm">
+          Mèo: <span id="catState" class="font-medium">Đang chạy</span>
+        </button>
+        <div class="glass rounded-xl px-3 py-2 flex items-center gap-3">
+          <label class="text-sm text-slate-200/80" for="catSpeed">Tốc độ</label>
+          <input id="catSpeed" type="range" min="0.6" max="2.4" step="0.1" value="1.2" class="accent-sky-400" />
+        </div>
+        <button id="printBtn" class="px-3 py-2 rounded-xl glass hover:bg-white/10 transition text-sm">In kết quả</button>
+        <button id="resetBtn" class="px-3 py-2 rounded-xl glass hover:bg-white/10 transition text-sm">Xóa lịch sử</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="relative max-w-6xl mx-auto px-4 pb-16">
+    <div class="grid gap-6 lg:grid-cols-12">
+      <!-- Input card -->
+      <section class="glass rounded-2xl p-5 md:p-6 lg:col-span-5">
+        <h2 class="text-lg font-semibold">Nhập thông tin</h2>
+        <p class="mt-1 text-sm text-slate-200/70">Dùng BMI để tham khảo. Không thay thế tư vấn y khoa.</p>
+
+        <div class="mt-5 grid gap-4">
+          <div class="grid grid-cols-2 gap-3">
+            <button id="genderMale" class="genderBtn ring-soft rounded-xl p-4 text-left hover:bg-white/5 transition" data-gender="male">
+              <div class="text-sm text-slate-200/70">Giới tính</div>
+              <div class="mt-1 font-semibold">Nam</div>
+              <div class="mt-2 text-xs text-slate-200/60">Ngưỡng gợi ý: BMI 18.5–24.9</div>
+            </button>
+            <button id="genderFemale" class="genderBtn ring-soft rounded-xl p-4 text-left hover:bg-white/5 transition" data-gender="female">
+              <div class="text-sm text-slate-200/70">Giới tính</div>
+              <div class="mt-1 font-semibold">Nữ</div>
+              <div class="mt-2 text-xs text-slate-200/60">Ngưỡng gợi ý: BMI 18.5–24.9</div>
+            </button>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm text-slate-200/80" for="weight">Cân nặng (kg)</label>
+              <input id="weight" inputmode="decimal" placeholder="Ví dụ: 60" class="mt-2 w-full rounded-xl bg-white/5 border border-slate-400/20 px-4 py-3 focus-strong" />
+            </div>
+            <div>
+              <label class="text-sm text-slate-200/80" for="height">Chiều cao (cm)</label>
+              <input id="height" inputmode="decimal" placeholder="Ví dụ: 165" class="mt-2 w-full rounded-xl bg-white/5 border border-slate-400/20 px-4 py-3 focus-strong" />
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm text-slate-200/80" for="age">Tuổi (tùy chọn)</label>
+              <input id="age" inputmode="numeric" placeholder="Ví dụ: 28" class="mt-2 w-full rounded-xl bg-white/5 border border-slate-400/20 px-4 py-3 focus-strong" />
+            </div>
+            <div>
+              <label class="text-sm text-slate-200/80" for="activity">Mức hoạt động (tùy chọn)</label>
+              <select id="activity" class="mt-2 w-full rounded-xl bg-white/5 border border-slate-400/20 px-4 py-3 focus-strong">
+                <option value="1.2">Ít vận động</option>
+                <option value="1.375">Nhẹ (1–3 buổi/tuần)</option>
+                <option value="1.55" selected>Vừa (3–5 buổi/tuần)</option>
+                <option value="1.725">Nhiều (6–7 buổi/tuần)</option>
+                <option value="1.9">Rất nhiều (lao động nặng)</option>
+              </select>
+            </div>
+          </div>
+
+          <button id="calcBtn" class="mt-1 rounded-xl bg-gradient-to-r from-sky-400 to-violet-400 text-slate-950 font-semibold px-4 py-3 hover:opacity-95 transition">
+            Tính toán & Đánh giá
+          </button>
+
+          <div id="errorBox" class="hidden rounded-xl border border-rose-300/30 bg-rose-500/10 p-3 text-sm text-rose-200"></div>
+
+          <div class="rounded-xl border border-slate-400/15 bg-white/5 p-4">
+            <div class="text-sm text-slate-200/70">Mẹo nhanh</div>
+            <ul class="mt-2 text-sm text-slate-100/90 space-y-2 list-disc list-inside">
+              <li>Ưu tiên cân nặng ổn định theo thời gian (đo cùng thời điểm mỗi ngày).</li>
+              <li>BMI chỉ là chỉ số tham khảo; tỷ lệ mỡ/cơ và vòng eo cũng quan trọng.</li>
+              <li>Nếu BMI rất thấp hoặc rất cao, cân nhắc gặp chuyên gia y tế.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results card -->
+      <section class="glass rounded-2xl p-5 md:p-6 lg:col-span-7">
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold">Kết quả</h2>
+            <p class="mt-1 text-sm text-slate-200/70">Hiển thị ngay sau khi bạn bấm tính toán.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="saveBtn" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition text-sm soft-border">Lưu vào lịch sử</button>
+            <button id="sampleBtn" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition text-sm soft-border">Dữ liệu mẫu</button>
+          </div>
+        </div>
+
+        <div class="mt-5 grid gap-4">
+          <div class="rounded-2xl border border-slate-400/15 bg-white/5 p-5">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <div class="text-sm text-slate-200/70">Chỉ số BMI</div>
+                <div class="mt-1 flex items-end gap-2">
+                  <div id="bmiValue" class="text-4xl font-semibold">—</div>
+                  <div id="bmiLabel" class="text-sm text-slate-200/70 pb-1">Chưa có dữ liệu</div>
+                </div>
+              </div>
+              <div class="w-full md:w-72">
+                <div class="flex items-center justify-between text-xs text-slate-200/60">
+                  <span>Gầy</span><span>Bình thường</span><span>Thừa cân</span><span>Béo phì</span>
+                </div>
+                <div class="mt-2 h-3 rounded-full bg-white/5 ring-soft overflow-hidden relative">
+                  <div class="absolute inset-0 sheen opacity-30"></div>
+                  <div class="h-full bg-gradient-to-r from-sky-300 via-emerald-300 to-rose-300 opacity-70"></div>
+                  <div id="bmiMarker" class="absolute top-1/2 -translate-y-1/2 h-5 w-1 rounded-full bg-white shadow" style="left: 0%;"></div>
+                </div>
+                <div class="mt-2 flex items-center justify-between text-[11px] text-slate-200/55">
+                  <span>16</span><span>18.5</span><span>25</span><span>30</span><span>40</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 grid md:grid-cols-3 gap-3">
+              <div class="rounded-xl bg-white/5 soft-border p-4">
+                <div class="text-xs text-slate-200/60">Cân nặng mục tiêu (BMI 18.5–24.9)</div>
+                <div id="targetWeight" class="mt-2 text-lg font-semibold">—</div>
+              </div>
+              <div class="rounded-xl bg-white/5 soft-border p-4">
+                <div class="text-xs text-slate-200/60">Chênh lệch so với ngưỡng</div>
+                <div id="deltaWeight" class="mt-2 text-lg font-semibold">—</div>
+              </div>
+              <div class="rounded-xl bg-white/5 soft-border p-4">
+                <div class="text-xs text-slate-200/60">Gợi ý nhanh</div>
+                <div id="quickTip" class="mt-2 text-sm text-slate-100/90 leading-relaxed">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4">
+            <div class="rounded-2xl border border-slate-400/15 bg-white/5 p-5">
+              <h3 class="font-semibold">Ước tính năng lượng (tham khảo)</h3>
+              <p class="mt-1 text-sm text-slate-200/70">Tính BMR theo Mifflin–St Jeor (cần tuổi). Nếu không có tuổi, mục này sẽ ẩn.</p>
+              <div id="calorieBox" class="mt-4 hidden">
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="rounded-xl bg-white/5 soft-border p-4">
+                    <div class="text-xs text-slate-200/60">BMR (kcal/ngày)</div>
+                    <div id="bmr" class="mt-2 text-lg font-semibold">—</div>
+                  </div>
+                  <div class="rounded-xl bg-white/5 soft-border p-4">
+                    <div class="text-xs text-slate-200/60">TDEE (kcal/ngày)</div>
+                    <div id="tdee" class="mt-2 text-lg font-semibold">—</div>
+                  </div>
+                </div>
+                <div class="mt-3 rounded-xl bg-white/5 soft-border p-4">
+                  <div class="text-xs text-slate-200/60">Gợi ý mục tiêu</div>
+                  <div id="calorieTip" class="mt-2 text-sm text-slate-100/90">—</div>
+                </div>
+              </div>
+              <div id="calorieEmpty" class="mt-4 rounded-xl bg-white/5 soft-border p-4 text-sm text-slate-200/70">
+                Nhập thêm <span class="text-slate-100">tuổi</span> để xem BMR/TDEE.
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-400/15 bg-white/5 p-5">
+              <h3 class="font-semibold">Lịch sử đo gần đây</h3>
+              <p class="mt-1 text-sm text-slate-200/70">Lưu trên thiết bị (localStorage). Bạn có thể in kết quả.</p>
+              <div id="history" class="mt-4 space-y-2">
+                <div class="text-sm text-slate-200/70">Chưa có bản ghi.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-400/15 bg-white/5 p-5">
+            <h3 class="font-semibold">Lưu ý an toàn</h3>
+            <div class="mt-2 text-sm text-slate-200/70 leading-relaxed">
+              Ứng dụng này cung cấp ước lượng dựa trên BMI và công thức phổ biến.
+              Nếu bạn có bệnh lý nền, đang mang thai, hoặc có triệu chứng bất thường, hãy tham khảo bác sĩ/chuyên gia dinh dưỡng.
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Cat layer -->
+  <div id="catLayer" aria-hidden="true">
+    <div id="catRunner" title="Mèo đang chạy vòng vòng">
+      <svg class="cat" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+        <!-- tail -->
+        <path class="tail outline" d="M82 30 C98 26, 108 36, 104 48 C101 56, 90 60, 82 56" />
+        <path class="tail" d="M82 30 C98 26, 108 36, 104 48 C101 56, 90 60, 82 56" fill="none" stroke="#f3f4f6" stroke-width="6" stroke-linecap="round" opacity=".95"/>
+
+        <!-- body -->
+        <ellipse class="body" cx="54" cy="44" rx="34" ry="20" />
+        <path class="stripe" d="M34 33 C38 40, 38 48, 34 56" />
+        <path class="stripe" d="M48 28 C54 38, 54 50, 48 60" />
+        <path class="stripe" d="M62 30 C68 40, 68 50, 62 58" />
+
+        <!-- head -->
+        <circle class="body" cx="26" cy="36" r="16" />
+        <path class="body" d="M14 26 L18 14 L26 24 Z" />
+        <path class="body" d="M38 26 L34 14 L26 24 Z" />
+        <circle class="eye" cx="22" cy="36" r="2.2" />
+        <circle class="eye" cx="31" cy="36" r="2.2" />
+        <circle class="cheek" cx="18" cy="40" r="2.6" />
+        <circle class="cheek" cx="34" cy="40" r="2.6" />
+        <path class="outline" d="M24 42 Q26 44 28 42" />
+        <path class="outline" d="M10 38 Q16 36 20 38" />
+        <path class="outline" d="M32 38 Q36 36 42 38" />
+
+        <!-- legs -->
+        <g class="leg l1">
+          <path class="body" d="M44 56 C44 66 50 66 50 56" />
+          <path class="outline" d="M44 56 C44 66 50 66 50 56" />
+        </g>
+        <g class="leg l2">
+          <path class="body" d="M62 56 C62 66 68 66 68 56" />
+          <path class="outline" d="M62 56 C62 66 68 66 68 56" />
+        </g>
+
+        <!-- outline body -->
+        <path class="outline" d="M20 44 C20 30 38 24 54 24 C74 24 88 34 88 44 C88 56 74 64 54 64 C38 64 20 58 20 44 Z" />
+        <path class="outline" d="M12 36 C12 26 18 20 26 20 C34 20 40 26 40 36 C40 46 34 52 26 52 C18 52 12 46 12 36 Z" />
+      </svg>
+    </div>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    const state = {
+      gender: 'male',
+      lastResult: null,
+      catEnabled: true,
+      catSpeed: 1.2,
+    };
+
+    function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+    function round1(n){ return Math.round(n*10)/10; }
+    function round0(n){ return Math.round(n); }
+
+    function parseNumber(v){
+      if (v == null) return NaN;
+      const s = String(v).trim().replace(',', '.');
+      return Number(s);
+    }
+
+    function setGender(g){
+      state.gender = g;
+      for (const btn of $$('.genderBtn')){
+        const on = btn.dataset.gender === g;
+        btn.classList.toggle('bg-white/10', on);
+        btn.classList.toggle('border-sky-300/30', on);
+        btn.classList.toggle('shadow-[0_0_0_1px_rgba(56,189,248,.30),_0_16px_40px_rgba(56,189,248,.12)]', on);
+      }
+    }
+
+    function bmiCategory(bmi){
+      if (bmi < 18.5) return { label: 'Gầy', color: 'text-sky-200', tip: 'Ưu tiên tăng chất lượng bữa ăn, đủ đạm, ngủ đủ giấc và tập kháng lực nhẹ để tăng khối cơ.' };
+      if (bmi < 25) return { label: 'Bình thường', color: 'text-emerald-200', tip: 'Duy trì thói quen tốt: ăn cân bằng, vận động đều, theo dõi vòng eo và giấc ngủ.' };
+      if (bmi < 30) return { label: 'Thừa cân', color: 'text-amber-200', tip: 'Giảm nhẹ năng lượng (200–400 kcal/ngày), tăng vận động (đi bộ nhanh/kháng lực) và ưu tiên đạm + rau.' };
+      return { label: 'Béo phì', color: 'text-rose-200', tip: 'Nên đánh giá thêm vòng eo, mỡ máu, huyết áp. Giảm năng lượng có kiểm soát và cân nhắc tư vấn chuyên gia.' };
+    }
+
+    function idealWeightRangeKg(heightCm){
+      const h = heightCm/100;
+      const min = 18.5 * h*h;
+      const max = 24.9 * h*h;
+      return [min, max];
+    }
+
+    function computeBMR({gender, weightKg, heightCm, age}){
+      // Mifflin–St Jeor
+      if (!Number.isFinite(age) || age <= 0) return null;
+      const base = 10*weightKg + 6.25*heightCm - 5*age;
+      return gender === 'male' ? (base + 5) : (base - 161);
+    }
+
+    function markerLeftPct(bmi){
+      // Map 16..40 to 0..100
+      const pct = (bmi - 16) / (40 - 16) * 100;
+      return clamp(pct, 0, 100);
+    }
+
+    function showError(msg){
+      const box = $('#errorBox');
+      box.textContent = msg;
+      box.classList.remove('hidden');
+    }
+    function clearError(){ $('#errorBox').classList.add('hidden'); }
+
+    function formatRange(min,max){ return `${round1(min)}–${round1(max)} kg`; }
+
+    function evaluate(){
+      clearError();
+      const weight = parseNumber($('#weight').value);
+      const height = parseNumber($('#height').value);
+      const age = parseNumber($('#age').value);
+      const activity = parseNumber($('#activity').value);
+
+      if (!Number.isFinite(weight) || weight <= 0) return showError('Vui lòng nhập cân nặng hợp lệ (kg).');
+      if (!Number.isFinite(height) || height <= 0) return showError('Vui lòng nhập chiều cao hợp lệ (cm).');
+      if (height < 80 || height > 230) return showError('Chiều cao có vẻ không hợp lý. Vui lòng kiểm tra lại (cm).');
+      if (weight < 20 || weight > 300) return showError('Cân nặng có vẻ không hợp lý. Vui lòng kiểm tra lại (kg).');
+
+      const h = height/100;
+      const bmi = weight/(h*h);
+      const cat = bmiCategory(bmi);
+      const [minW, maxW] = idealWeightRangeKg(height);
+
+      // Delta
+      let deltaText = '—';
+      if (weight < minW) deltaText = `Thiếu ~${round1(minW - weight)} kg để đạt ngưỡng tối thiểu`;
+      else if (weight > maxW) deltaText = `Dư ~${round1(weight - maxW)} kg so với ngưỡng tối đa`;
+      else deltaText = 'Đang trong vùng mục tiêu';
+
+      // Update UI
+      $('#bmiValue').textContent = round1(bmi);
+      $('#bmiLabel').textContent = cat.label;
+      $('#bmiLabel').className = `text-sm pb-1 ${cat.color}`;
+      $('#targetWeight').textContent = formatRange(minW, maxW);
+      $('#deltaWeight').textContent = deltaText;
+      $('#quickTip').textContent = cat.tip;
+      $('#bmiMarker').style.left = `${markerLeftPct(bmi)}%`;
+
+      // Calorie box
+      const bmr = computeBMR({gender: state.gender, weightKg: weight, heightCm: height, age});
+      if (bmr){
+        const tdee = bmr * activity;
+        $('#calorieBox').classList.remove('hidden');
+        $('#calorieEmpty').classList.add('hidden');
+        $('#bmr').textContent = `${round0(bmr)}`;
+        $('#tdee').textContent = `${round0(tdee)}`;
+
+        let ctip = '';
+        if (bmi < 18.5) ctip = `Tăng cân: thử +250 đến +400 kcal/ngày so với TDEE (~${round0(tdee+250)}–${round0(tdee+400)} kcal).`;
+        else if (bmi < 25) ctip = `Duy trì: quanh TDEE (~${round0(tdee)} kcal), điều chỉnh theo cân nặng/tuần.`;
+        else ctip = `Giảm cân: thử -300 đến -500 kcal/ngày so với TDEE (~${round0(tdee-500)}–${round0(tdee-300)} kcal).`;
+        $('#calorieTip').textContent = ctip;
+      } else {
+        $('#calorieBox').classList.add('hidden');
+        $('#calorieEmpty').classList.remove('hidden');
+      }
+
+      state.lastResult = {
+        ts: Date.now(),
+        gender: state.gender,
+        weight, height,
+        age: Number.isFinite(age) ? age : null,
+        bmi: round1(bmi),
+        label: cat.label,
+      };
+    }
+
+    // History
+    const KEY = 'healthcheck_bmi_history_v1';
+    function loadHistory(){
+      try{ return JSON.parse(localStorage.getItem(KEY) || '[]'); }catch{ return []; }
+    }
+    function saveHistory(items){ localStorage.setItem(KEY, JSON.stringify(items)); }
+
+    function renderHistory(){
+      const box = $('#history');
+      const items = loadHistory();
+      if (!items.length){
+        box.innerHTML = '<div class="text-sm text-slate-200/70">Chưa có bản ghi.</div>';
+        return;
+      }
+      box.innerHTML = items.slice(0,8).map((it, idx) => {
+        const d = new Date(it.ts);
+        const when = d.toLocaleString('vi-VN', { hour12: false });
+        const g = it.gender === 'male' ? 'Nam' : 'Nữ';
+        const badge = it.label === 'Bình thường' ? 'bg-emerald-400/15 text-emerald-200 border-emerald-400/20'
+          : it.label === 'Gầy' ? 'bg-sky-400/15 text-sky-200 border-sky-400/20'
+          : it.label === 'Thừa cân' ? 'bg-amber-400/15 text-amber-200 border-amber-400/20'
+          : 'bg-rose-400/15 text-rose-200 border-rose-400/20';
+
+        return `
+          <div class="rounded-xl soft-border bg-white/5 p-3 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-semibold">BMI ${it.bmi}</span>
+                <span class="text-[12px] border rounded-full px-2 py-0.5 ${badge}">${it.label}</span>
+                <span class="text-xs text-slate-200/60">• ${g}</span>
+              </div>
+              <div class="mt-1 text-xs text-slate-200/65 truncate">${it.weight} kg • ${it.height} cm${it.age ? ` • ${it.age} tuổi` : ''} • ${when}</div>
+            </div>
+            <button class="text-xs px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition" data-del="${idx}">Xóa</button>
+          </div>
+        `;
+      }).join('');
+
+      // Bind delete
+      box.querySelectorAll('[data-del]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = Number(btn.getAttribute('data-del'));
+          const items = loadHistory();
+          items.splice(i,1);
+          saveHistory(items);
+          renderHistory();
+        });
+      });
+    }
+
+    function saveCurrent(){
+      if (!state.lastResult) return showError('Chưa có kết quả để lưu. Hãy bấm “Tính toán & Đánh giá”.');
+      const items = loadHistory();
+      items.unshift(state.lastResult);
+      saveHistory(items);
+      renderHistory();
+    }
+
+    // Cat runner animation
+    const cat = $('#catRunner');
+    let t0 = performance.now();
+    let raf = null;
+
+    function animate(now){
+      const dt = (now - t0) / 1000;
+      const speed = state.catSpeed;
+
+      // Ellipse path around viewport
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const cx = W * 0.52;
+      const cy = H * 0.56;
+      const rx = Math.max(220, W * 0.35);
+      const ry = Math.max(160, H * 0.26);
+
+      // Angular velocity
+      const omega = 0.65 * speed; // rad/s
+      const a = dt * omega;
+      const x = cx + rx * Math.cos(a);
+      const y = cy + ry * Math.sin(a);
+
+      // Tangent angle for facing direction
+      const dx = -rx * Math.sin(a);
+      const dy =  ry * Math.cos(a);
+      const angle = Math.atan2(dy, dx) * 180/Math.PI;
+
+      // Slight bob
+      const bob = Math.sin(a*4) * 2.5;
+
+      cat.style.transform = `translate(${x}px, ${y + bob}px) rotate(${angle}deg)`;
+
+      if (state.catEnabled) raf = requestAnimationFrame(animate);
+    }
+
+    function startCat(){
+      if (raf) cancelAnimationFrame(raf);
+      t0 = performance.now();
+      state.catEnabled = true;
+      $('#catState').textContent = 'Đang chạy';
+      $('#catLayer').style.display = 'block';
+      raf = requestAnimationFrame(animate);
+    }
+    function stopCat(){
+      state.catEnabled = false;
+      $('#catState').textContent = 'Tạm dừng';
+      $('#catLayer').style.display = 'none';
+      if (raf) cancelAnimationFrame(raf);
+      raf = null;
+    }
+
+    // Events
+    $$('.genderBtn').forEach(btn => btn.addEventListener('click', () => setGender(btn.dataset.gender)));
+    $('#calcBtn').addEventListener('click', evaluate);
+    $('#saveBtn').addEventListener('click', saveCurrent);
+    $('#sampleBtn').addEventListener('click', () => {
+      setGender(Math.random() > 0.5 ? 'male' : 'female');
+      $('#weight').value = (50 + Math.round(Math.random()*35)).toString();
+      $('#height').value = (150 + Math.round(Math.random()*30)).toString();
+      $('#age').value = (18 + Math.round(Math.random()*30)).toString();
+      evaluate();
+    });
+
+    ['weight','height','age'].forEach(id => {
+      $('#' + id).addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') evaluate();
+      });
+    });
+
+    $('#toggleCatBtn').addEventListener('click', () => {
+      state.catEnabled ? stopCat() : startCat();
+    });
+    $('#catSpeed').addEventListener('input', (e) => {
+      state.catSpeed = parseNumber(e.target.value);
+      if (state.catEnabled && !raf) startCat();
+    });
+
+    $('#printBtn').addEventListener('click', () => window.print());
+    $('#resetBtn').addEventListener('click', () => {
+      localStorage.removeItem(KEY);
+      renderHistory();
+    });
+
+    // Init
+    setGender('male');
+    renderHistory();
+    startCat();
+  </script>
+</body>
+</html>
